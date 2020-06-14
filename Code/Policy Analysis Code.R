@@ -22,6 +22,7 @@ suppressMessages(library("readxl")) # Used for loading excel files
 suppressMessages(library("readr")) # Used for working with files
 suppressMessages(library("pander")) # Used for pretty tables
 suppressMessages(library("lubridate")) # Used for fixing dates
+suppressMessages(library("praise")) # Used for positive reinforcement
 
 
 # Bring in the data, taking advantage of the project structure
@@ -142,6 +143,9 @@ police_joined <- police_all_dates %>%
   left_join(census_data) %>%
   # Join in our county data
   left_join(county_cleaned, by = c("city" = "city", "stateCode" = "geographic_area")) %>%
+  # Make our numeric columns not characters
+  mutate(percent_completed_hs = as.numeric(percent_completed_hs),
+         poverty_rate = as.numeric(poverty_rate)) %>%
   print()
 
 
@@ -177,7 +181,7 @@ police_joined %>%
     # format our title and subtitle
     theme(plot.title = element_text(hjust = 0, color = "slateblue4"),
           plot.subtitle = element_text(hjust = 0, color = "slateblue2", size = 10),
-          plot.caption = element_text(color = "dark gray", size = 10))
+          plot.caption = element_text(color = "dark gray", face = "italic", size = 10))
 
 
 # What's the breakout by race?
@@ -209,7 +213,7 @@ police_joined %>%
   # format our title and subtitle
   theme(plot.title = element_text(hjust = 0, color = "slateblue4"),
         plot.subtitle = element_text(hjust = 0, color = "slateblue2", size = 10),
-        plot.caption = element_text(color = "dark gray", size = 10))
+        plot.caption = element_text(color = "dark gray", size = 10, face = "italic"))
 
 
 # Which states had the most fatalities?
@@ -243,7 +247,7 @@ police_joined %>%
   # format our title and subtitle
   theme(plot.title = element_text(hjust = 0, color = "slateblue4"),
         plot.subtitle = element_text(hjust = 0, color = "slateblue2", size = 10),
-        plot.caption = element_text(color = "dark gray", size = 10)) +
+        plot.caption = element_text(color = "dark gray", size = 10, face = "italic")) +
   # flip the axes
   coord_flip()
 
@@ -291,7 +295,7 @@ police_joined %>%
   # format our title and subtitle
   theme(plot.title = element_text(hjust = 0, color = "slateblue4"),
         plot.subtitle = element_text(hjust = 0, color = "slateblue2", size = 10),
-        plot.caption = element_text(color = "dark gray", size = 10)) +
+        plot.caption = element_text(color = "dark gray", size = 10, face = "italic")) +
   # flip the axes
   coord_flip()
 
@@ -302,10 +306,162 @@ police_joined %>%
 
 
 ########################################################################
-## Demographic Analysis  -----------------------------------------------
+## High School Completion Rate Analysis  -------------------------------
 ########################################################################
+# I'd like to analyze the number of shootings against the average city
+# population which completed high school. My hypothesis here is that there
+# will be more shootings in cities with low high school completion rates.
+
+# The first thing to do is to fill out our data a bit more. There is a lot
+# of data that didn't match. What I plan to do for imputation is find the
+# average percent_completed_highschool for each state and impute that.
+
+# Start by computing the average high school completion rates by state
+hs_averages <- police_joined %>%
+  group_by(state) %>%
+  summarise(percent_completed_hsavg = mean(percent_completed_hs, na.rm = T))
+
+# Split our dataset on those with NA values and those without
+police_hs_na <- police_joined %>%
+  # Only keep our nas for the first one
+  filter(is.na(percent_completed_hs)) %>%
+  left_join(hs_averages) %>%
+  # now get rid of the percent_completed_hs field and rename the other one to match
+  select(-percent_completed_hs) %>%
+  rename(percent_completed_hs = percent_completed_hsavg) %>%
+  print()
+
+police_hs_nona <- police_joined %>%
+  # Only keep our non-nas for the second one
+  filter(!(is.na(percent_completed_hs)))
+
+# Now bring both datasets back together
+police_hs <- bind_rows(police_hs_na, police_hs_nona)
+
+# If the number of rows we ended with doesn't match the number of rows
+# we started with, or if there are still any nulls in the percent_completed_hs
+# field, throw an error message.
+if (nrow(police_hs) != nrow(police_joined) | any(is.na(police_hs$percent_completed_hs))) {
+  "ERROR! SOMETHING'S UP WITH THE police_hs dataframe."
+} else {
+  cat(praise(), "Let's keep going.")
+}
+
+# Let's look at a boxplot of the data
+ggplot(police_hs, aes(y = percent_completed_hs)) +
+  geom_boxplot(outlier.colour="slateblue4",
+               outlier.size=2,
+               color = "slateblue3") +
+  theme_classic() +
+  # Let's change the names of the axes and title
+  labs(title = "High School Completion Rate by Geographic Area",
+       subtitle = "Data is collected from 2014 Census data.",
+       caption = "") +
+  ylab("Percentage (%)") +
+  # Center the title and format the subtitle/caption
+  theme(plot.title = element_text(hjust = 0, color = "slateblue4"),
+        plot.subtitle = element_text(color = "slateblue1", size = 10),
+        plot.caption = element_text(hjust = 1, face = "italic", color = "dark gray"),
+        # remove the x axis labels because they don't mean much for us
+        axis.text.x = element_blank()) +
+  # I thought the boxplot was too thick, so let's make it a little skinnier
+  scale_x_discrete(limits=c("-.1", ".1"))
+
+# It looks like most of the areas have pretty high high school completion
+# rates, with a median of
+median(police_hs$percent_completed_hs)
+# and an average of
+mean(police_hs$percent_completed_hs)
+
+### Correlation
+# Let's now look to see if there's any correlation between high school
+# completion rate and number of police-related fatalities.
+police_hs %>%
+  # Start by grouping by state
+  group_by(state) %>%
+  # Count up our sums
+  summarise(fatalities = n(),
+            hs_completionavg = mean(percent_completed_hs)) %>%
+  ggplot(aes(x = hs_completionavg, y = fatalities)) +
+  # Make it a scatter plot
+  geom_point(color = "slateblue", alpha = .8) +
+  geom_text(aes(label = state), # label by state
+            color = "slateblue", # Make our color match
+            size = 3, # shrink the size
+            alpha = .8, # add some transparency
+            check_overlap = T, # avoid overlabelling
+            nudge_y = 150) + # nudge the text a bit off center
+  theme_classic() +
+  # Let's change the names of the axes and title
+  labs(title = "Police-caused Fatalities by High School Completion Rate",
+       subtitle = "Data is broken out by state and uses 2014 Census data.",
+       caption = "") +
+  xlab("High School Completion Rate (%)") +
+  ylab("Police-caused Fatalities") +
+  # Center the title and format the subtitle/caption
+  theme(plot.title = element_text(hjust = 0, color = "slateblue4"),
+        plot.subtitle = element_text(color = "slateblue1", size = 10),
+        plot.caption = element_text(hjust = 1, face = "italic", color = "dark gray"))
 
 
+# Again, this doesn't account for normalizing our data by population. Let's
+# see how that changes things
+police_hs %>%
+  # Start by grouping by state
+  group_by(state) %>%
+  # Count up our sums
+  summarise(fatalities = n(),
+            hs_completionavg = mean(percent_completed_hs)) %>%
+  # To normalize by state population, let's rejoin this data in
+  left_join(census_data) %>%
+  # Create our normalized data and multiply by 1,000,000 so we get the number
+  # of fatalities per 1,000,000 people
+  mutate(fatalities_normalized = 1000000*fatalities/popEst2014) %>%
+  ggplot(aes(x = hs_completionavg, y = fatalities_normalized)) +
+  # Make it a scatter plot
+  geom_point(color = "slateblue", alpha = 1) +
+  theme_classic() +
+  # Let's change the names of the axes and title
+  labs(title = "Normalized Police-caused Fatalities\nby High School Completion Rate",
+       subtitle = "Police-caused fatalities are per 1,000,000 population\nusing 2014 Census data.",
+       caption = "*per 1,000,000 population") +
+  xlab("High School Completion Rate (%)") +
+  ylab("Police-caused Fatalities*") +
+  # Center the title and format the subtitle/caption
+  theme(plot.title = element_text(hjust = 0, color = "slateblue4"),
+        plot.subtitle = element_text(color = "slateblue1", size = 10),
+        plot.caption = element_text(hjust = 1, face = "italic", color = "dark gray"))
 
+# Between both of these graphs, I can't see any correlation in the data. It's
+# reassuring to know that police-caused fatalities would not drastically increase
+# in areas with lower high school completion rates.
 
+#What's the actual correlation?
+police_hs %>%
+  # Start by grouping by state
+  group_by(state) %>%
+  # Count up our sums
+  summarise(fatalities = n(),
+            hs_completionavg = mean(percent_completed_hs)) %>%
+  # To normalize by state population, let's rejoin this data in
+  left_join(census_data) %>%
+  # Create our normalized data and multiply by 1,000,000 so we get the number
+  # of fatalities per 1,000,000 people
+  mutate(fatalities_normalized = 1000000*fatalities/popEst2014) %>%
+  select(-state, -stateCode) %>%
+  cor() %>%
+  pander()
 
+# From this we can see that the correlation is highest with population,
+# which makes sense. Once normalizing for population, the correlation
+# drops to -.025, which is highly uncorrelated. Overall, I would say
+# that there is no correlation between fatalities and high school
+# completion rate.
+
+########################################################################
+## Poverty Rate Analysis  ----------------------------------------------
+########################################################################
+# I'd like to analyze the number of shootings against the average city
+# poverty rate. My hypothesis here is that there will be more shootings
+# in cities with high poverty rates, although my hypothesis earlier
+# was debunked, so we will see!

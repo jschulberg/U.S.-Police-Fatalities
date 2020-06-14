@@ -1,19 +1,19 @@
-#######################################################################
-#######################################################################
+###########################################################################
+###########################################################################
 
-#####               U.S. Policy Fatalities Analysis               #####
+#######               U.S. Policy Fatalities Analysis               #######
 
-#######################################################################
-#######################################################################
+###########################################################################
+###########################################################################
 # In this script, I will analyze the U.S. Policy Fatalities dataset included
 # in the data folder of this repository. I will use a variety of exploratory
 # and modeling techniques to do so, including, but not limited to:
 
 #   --
 
-#######################################################################
-# Set Up --------------------------------------------------------------
-#######################################################################
+###########################################################################
+# Set Up ------------------------------------------------------------------
+###########################################################################
 # Bring in packages
 suppressMessages(library("tidyverse")) # Used for data wrangling
 suppressMessages(library("tidyr")) # Used for data cleaning
@@ -21,43 +21,81 @@ suppressMessages(library("ggplot2")) # Used for visualizations
 suppressMessages(library("readxl")) # Used for loading excel files
 suppressMessages(library("readr")) # Used for working with files
 suppressMessages(library("pander")) # Used for pretty tables
+suppressMessages(library("lubridate")) # Used for fixing dates
 
 
-# Bring in the data, delimited by a tab ("\t")
-data_crime <- read.delim(here::here("Data/uscrime.txt"), header = T)
+# Bring in the data, taking advantage of the project structure
+police_data_first <- readr::read_csv(here::here("Data/Police Fatalities.csv"))
+police_data_second <- readr::read_csv(here::here("Data/kaggle_PoliceKillingsUS.csv"))
 
 # Convert to a tibble, my preferred data structure
-data_crime <- as_tibble(data_crime)
-
-# Let's take a peek under the hood
-head(data_crime)
-summary(data_crime)
-
-# Below is a list of the variables in data along with their associated descriptions. We want to predict the last
-# column, Crime, based on the other predictor variables.
-# Variable	 	Description
-# M		percentage of males aged 14-24 in total state population
-# So		indicator variable for a southern state
-# Ed		mean years of schooling of the population aged 25 years or over
-# Po1		per capita expenditure on police protection in 1960
-# Po2		per capita expenditure on police protection in 1959
-# LF		labour force participation rate of civilian urban males in the age-group 14-24
-# M.F		number of males per 100 females
-# Pop		state population in 1960 in hundred thousands
-# NW		percentage of nonwhites in the population
-# U1		unemployment rate of urban males 14-24
-# U2		unemployment rate of urban males 35-39
-# Wealth		wealth: median value of transferable assets or family income
-# Ineq		income inequality: percentage of families earning below half the median income
-# Prob		probability of imprisonment: ratio of number of commitments to number of offenses
-# Time		average time in months served by offenders in state prisons before their first release
-# Crime		crime rate: number of offenses per 100,000 population in 1960
+(police_data_first <- as_tibble(police_data_first))
+(police_data_second <- as_tibble(police_data_second))
 
 
 ########################################################################
-# Linear Regression ----------------------------------------------------
+## Reconcile/Join Data -------------------------------------------------
 ########################################################################
-# In the first section, we'll use a simple linear regression model to
-# predict on our crime data.
+# Notice that I've brought in a few datasets. Different datasets include
+# different ranges of time for police fatalities, with some overlap. On
+# top of that, I have some census, incident, and subject data
+
+# Start by cleaning our date columns
+police_data_first_date <- police_data_first %>%
+  # Use lubridate to fix up the dates
+  mutate(Date = mdy(Date),
+         # Change the flee column to be a character
+         Flee = as.character(if_else(T, "Flee", "Not fleeing	"))) %>%
+  # Order by Date
+  arrange(Date) %>%
+  # Make all the column names lower case
+  janitor::clean_names()
+
+# Repeat for our other dataset
+police_data_second_date <- police_data_second %>%
+  # Use lubridate to fix up the dates
+  mutate(date = dmy(date)) %>%
+  # Rename our mental illness column
+  rename(mental_illness = signs_of_mental_illness) %>%
+  # Order by Date
+  arrange(date)
+
+# What's our range of dates?
+range(police_data_first_date$Date)
+range(police_data_second_date$date)
+
+# How much overlap is there between the two datasets?
+table(police_data_first_date$name %in% police_data_second_date$name)
+
+# Split out our names that are not in the first dataset
+second_no_overlap <- police_data_second_date[!(police_data_second_date$name %in% police_data_first_date$name), ]
+
+# Join both datasets together
+police_all_dates <- police_data_first_date %>%
+  # There are a lot of duplicates, so let's try to remove these
+  # We'll look for duplicative names + dates, since there are naturally
+  # some repeat common names
+  distinct(name, age, .keep_all = T) %>%
+  bind_rows(second_no_overlap) %>%
+  # Get rid of previous ID column and make our ID row unique
+  select(-id) %>%
+  mutate(uid = row_number()) %>%
+  rename(id = uid) %>%
+  print()
+
+police_compare <- police_data_first_date %>%
+  # There are a lot of duplicates, so let's try to remove these
+  distinct(name, .keep_all = T) %>%
+  bind_rows(second_no_overlap) %>%
+  # Get rid of previous ID column and make our ID row unique
+  select(-id) %>%
+  mutate(uid = row_number()) %>%
+  rename(id = uid) %>%
+  print()
+
+# Where's the overlap?
+compare <- police_all_dates[duplicated(police_all_dates$name), ]
 
 
+# We have our full dataset now! Let's bring in a few more columns
+# that will eventually help us immensely.

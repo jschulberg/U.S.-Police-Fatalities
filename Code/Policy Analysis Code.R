@@ -70,7 +70,7 @@ police_data_second_date <- police_data_second %>%
   # Use lubridate to fix up the dates
   # In general, we need to fix up a bunch of the columns in this other
   # dataset so we can match it up with our first dataset
-  mutate(date = dmy(date),
+  mutate(date = mdy(date),
          # Clean up uor gender column
          gender = case_when(
            gender == "M" ~ "Male",
@@ -98,7 +98,7 @@ police_data_second_date <- police_data_second %>%
   arrange(date)
 
 # What's our range of dates?
-range(police_data_first_date$Date)
+range(police_data_first_date$date)
 range(police_data_second_date$date)
 
 # How much overlap is there between the two datasets?
@@ -184,8 +184,8 @@ police_joined %>%
     xlab("") +
     ylab("Number of Fatalities") +
     labs(title = "Number of Police-caused Fatalities over Time",
-         subtitle = "Data runs from 2000-2017",
-         caption = "Data is gathered from Kaggle and Data.World") +
+         subtitle = "Data runs from 2000-2020",
+         caption = "Data is gathered from the Washington Post at\nhttps://github.com/washingtonpost/data-police-shootings") +
     # format our title and subtitle
     theme(plot.title = element_text(hjust = 0, color = "slateblue4"),
           plot.subtitle = element_text(hjust = 0, color = "slateblue2", size = 10),
@@ -200,7 +200,7 @@ police_joined %>%
   group_by(race) %>%
   # Count up our sums
   summarise(fatalities = n()) %>%
-  top_n(10) %>%
+  top_n(10, fatalities) %>%
   ggplot(aes(x = reorder(race, fatalities), y = fatalities), label = fatalities) +
   # Let's make it a column graph and change the color/transparency
   geom_col(fill = "slateblue") +
@@ -212,7 +212,7 @@ police_joined %>%
                group_by(race) %>%
                # Count up our sums
                summarise(fatalities = n()) %>%
-               top_n(10),
+               top_n(10, fatalities),
              aes(label = fatalities),
              size = 2.5) +
   # Change the theme to classic
@@ -221,8 +221,8 @@ police_joined %>%
   xlab("") +
   ylab("Number of Fatalities") +
   labs(title = "Number of Police-caused Fatalities by Race",
-       subtitle = "Data runs from 2000-2017",
-       caption = "Data is gathered from Kaggle and Washington Post") +
+       subtitle = "Data runs from 2000-2020",
+       caption = "Data is gathered from the Washington Post at\nhttps://github.com/washingtonpost/data-police-shootings") +
   # format our title and subtitle
   theme(plot.title = element_text(hjust = 0, color = "slateblue4"),
         plot.subtitle = element_text(hjust = 0, color = "slateblue2", size = 10),
@@ -259,8 +259,8 @@ police_joined %>%
   xlab("") +
   ylab("Number of Fatalities") +
   labs(title = "Number of Police-caused Fatalities over Time",
-       subtitle = "Data runs from 2000-2017",
-       caption = "Data is gathered from Kaggle and Data.World") +
+       subtitle = "Data runs from 2000-2020",
+       caption = "Data is gathered from the Washington Post at\nhttps://github.com/washingtonpost/data-police-shootings") +
   # format our title and subtitle
   theme(plot.title = element_text(hjust = 0, color = "slateblue4"),
         plot.subtitle = element_text(hjust = 0, color = "slateblue2", size = 10),
@@ -268,7 +268,7 @@ police_joined %>%
 
 # One thing I've noticed here is the spike in killings of white individuals
 # in 2015. As a note, I merged two disparate datasets, one that runs from 2000-
-# 2015 and the other that runs from 2015-2017. It's possible that something's
+# 2015 and the other that runs from 2015-2020. It's possible that something's
 # amiss with the latter. The other facet that may be skewing the data is that
 # 31% of the data on race has not been collected (i.e. is null). If most of
 # these individuals were black, that would constitute another 3800 individuals.
@@ -290,8 +290,8 @@ police_joined %>%
   xlab("Age") +
   ylab("Number of Fatalities") +
   labs(title = "Age of Individuals Killed by Police",
-       subtitle = "Data runs from 2000-2017",
-       caption = "Data is gathered from Kaggle and Washington Post") +
+       subtitle = "Data runs from 2000-2020",
+       caption = "Data is gathered from the Washington Post at\nhttps://github.com/washingtonpost/data-police-shootings") +
   # format our title and subtitle
   theme(plot.title = element_text(hjust = 0, color = "slateblue4"),
         plot.subtitle = element_text(hjust = 0, color = "slateblue2", size = 10),
@@ -303,7 +303,7 @@ police_joined %>%
   group_by(state) %>%
   # Count up our sums
   summarise(fatalities = n()) %>%
-  top_n(10) %>%
+  top_n(10, fatalities) %>%
   ggplot(aes(x = reorder(state, fatalities), y = fatalities), label = fatalities) +
   # Let's make it a column graph and change the color/transparency
   geom_col(fill = "slateblue") +
@@ -313,7 +313,7 @@ police_joined %>%
                group_by(state) %>%
                # Count up our sums
                summarise(fatalities = n()) %>%
-               top_n(10),
+               top_n(10, fatalities),
              aes(label = fatalities),
              size = 2.5) +
   # Change the theme to classic
@@ -322,8 +322,8 @@ police_joined %>%
   xlab("") +
   ylab("Number of Fatalities") +
   labs(title = "Number of Police-caused Fatalities by State",
-       subtitle = "Data runs from 2000-2017",
-       caption = "Data is gathered from Kaggle and Washington Post") +
+       subtitle = "Data runs from 2000-2020",
+       caption = "Data is gathered from the Washington Post at\nhttps://github.com/washingtonpost/data-police-shootings") +
   # format our title and subtitle
   theme(plot.title = element_text(hjust = 0, color = "slateblue4"),
         plot.subtitle = element_text(hjust = 0, color = "slateblue2", size = 10),
@@ -344,11 +344,11 @@ police_joined %>%
   # Count up our sums
   summarise(fatalities = n()) %>%
   # To normalize by state population, let's rejoin this data in
-  left_join(census_data) %>%
+  left_join(census_data, by = "state") %>%
   # Create our normalized data and multiply by 1,000,000 so we get the number
   # of fatalities per 1,000,000 people
   mutate(fatalities_normalized = 1000000*fatalities/popEst2014) %>%
-  top_n(10) %>%
+  top_n(10, fatalities_normalized) %>%
   ggplot(aes(x = reorder(state, fatalities_normalized), y = fatalities_normalized), label = fatalities_normalized) +
   geom_col(fill = "slateblue") +
   # Add a label by recreating our data build from earlier
@@ -358,11 +358,11 @@ police_joined %>%
                # Count up our sums
                summarise(fatalities = n()) %>%
                # To normalize by state population, let's rejoin this data in
-               left_join(census_data) %>%
+               left_join(census_data, by = "state") %>%
                # Create our normalized data and multiply by 1,000,000 so we get the number
                # of fatalities per 1,000,000 people
                mutate(fatalities_normalized = 1000000*fatalities/popEst2014) %>%
-               top_n(10),
+               top_n(10, fatalities_normalized),
              aes(label = round(fatalities_normalized, 0)),
              size = 2.5) +  # Change the theme to classic
   theme_classic() +
@@ -371,7 +371,7 @@ police_joined %>%
   ylab("Number of Fatalities*") +
   labs(title = "Number of Police-caused Fatalities by State",
        subtitle = "*Fatalities per 1,000,000 population",
-       caption = "Data is gathered from Kaggle and Washington Post") +
+       caption = "Data is gathered from the Washington Post at\nhttps://github.com/washingtonpost/data-police-shootings") +
   # format our title and subtitle
   theme(plot.title = element_text(hjust = 0, color = "slateblue4"),
         plot.subtitle = element_text(hjust = 0, color = "slateblue2", size = 10),
@@ -405,7 +405,7 @@ hs_averages <- police_joined %>%
 police_hs_na <- police_joined %>%
   # Only keep our nas for the first one
   filter(is.na(percent_completed_hs)) %>%
-  left_join(hs_averages) %>%
+  left_join(hs_averages, by = "state") %>%
   # now get rid of the percent_completed_hs field and rename the other one to match
   select(-percent_completed_hs) %>%
   rename(percent_completed_hs = percent_completed_hsavg) %>%
@@ -493,7 +493,7 @@ police_hs %>%
   summarise(fatalities = n(),
             hs_completionavg = mean(percent_completed_hs)) %>%
   # To normalize by state population, let's rejoin this data in
-  left_join(census_data) %>%
+  left_join(census_data, by = "state") %>%
   # Create our normalized data and multiply by 1,000,000 so we get the number
   # of fatalities per 1,000,000 people
   mutate(fatalities_normalized = 1000000*fatalities/popEst2014) %>%
@@ -598,7 +598,7 @@ ggplot(donut_inputs, aes(ymax = ymax, ymin = ymin, xmax = 4, xmin = 3, fill = So
   theme_void() +
   # Let's change the names of the axes and title
   labs(title = "Mental Illness among Victims of\nPolice-caused Fatalities",
-       subtitle = "Data runs from 2000-2017.",
+       subtitle = "Data runs from 2000-2020.",
        caption = "Data taken from Kaggle and Washington Post") +
   # Center the title and format the subtitle/caption
   theme(plot.title = element_text(hjust = 0, color = "slateblue4"),
@@ -637,8 +637,8 @@ police_hs %>%
   xlab("") +
   ylab("Percentage of Fatalities (%)") +
   labs(title = "Number of Police-caused Fatalities over Time",
-       subtitle = "Data runs from 2000-2017",
-       caption = "Data is gathered from Kaggle and Data.World") +
+       subtitle = "Data runs from 2000-2020",
+       caption = "Data is gathered from the Washington Post at\nhttps://github.com/washingtonpost/data-police-shootings") +
   # format our title and subtitle
   theme(plot.title = element_text(hjust = 0, color = "slateblue4"),
         plot.subtitle = element_text(hjust = 0, color = "slateblue2", size = 10),
@@ -675,8 +675,8 @@ police_hs %>%
   xlab("") +
   ylab("Percentage of Fatalities (%)") +
   labs(title = "Number of Police-caused Fatalities over Time",
-       subtitle = "Data runs from 2000-2017",
-       caption = "Data is gathered from Kaggle and Data.World") +
+       subtitle = "Data runs from 2000-2020",
+       caption = "Data is gathered from the Washington Post at\nhttps://github.com/washingtonpost/data-police-shootings") +
   # format our title and subtitle
   theme(plot.title = element_text(hjust = 0, color = "slateblue4"),
         plot.subtitle = element_text(hjust = 0, color = "slateblue2", size = 10),

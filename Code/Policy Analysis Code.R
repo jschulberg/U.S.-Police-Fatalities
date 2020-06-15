@@ -32,8 +32,8 @@ suppressMessages(library("praise")) # Used for positive reinforcement
 
 
 # Bring in the data, taking advantage of the project structure
-police_data_first <- readr::read_csv(here::here("Data/Police Fatalities.csv"))
-police_data_second <- readr::read_csv(here::here("Data/kaggle_PoliceKillingsUS.csv"))
+police_data_first <- readr::read_csv(here::here("Data/police_killings_2000-2015.csv"))
+police_data_second <- readr::read_csv(here::here("Data/police_killings_2015-2020.csv"))
 census_data <- readr::read_csv(here::here("Data/censusStatePopulations2014.csv"))
 county_data <- readr::read_csv(here::here("Data/HighSchoolCompletionPovertyRate.csv"))
 police_deaths <- readr::read_csv(here::here("Data/police_deaths.csv"))

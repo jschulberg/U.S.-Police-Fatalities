@@ -25,7 +25,7 @@ Interested in seeing my original code? Go to my GitHub repository here:
 **https://github.com/jschulberg/U.S.-Police-Fatalities**  
 
 Interested in learning more on the subject? Go to:  
-https://mappingpoliceviolence.org/  
+**https://mappingpoliceviolence.org/**  
 
 Interested in seeing the Washington Post's GitHub repository and source data? Go to:  
 **https://github.com/washingtonpost/data-police-shootings**   

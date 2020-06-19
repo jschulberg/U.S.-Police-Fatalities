@@ -37,6 +37,9 @@ police_data_second <- readr::read_csv(here::here("Data/police_killings_2015-2020
 census_data <- readr::read_csv(here::here("Data/censusStatePopulations2014.csv"))
 county_data <- readr::read_csv(here::here("Data/HighSchoolCompletionPovertyRate.csv"))
 police_deaths <- readr::read_csv(here::here("Data/police_deaths.csv"))
+race_demographics <- readr::read_csv(here::here("Data/race_demographics.csv"),
+                                     # define our NAs
+                                     na = c("<.01", "N/A"))
 
 # Convert to a tibble, my preferred data structure
 (police_data_first <- as_tibble(police_data_first))
@@ -44,9 +47,10 @@ police_deaths <- readr::read_csv(here::here("Data/police_deaths.csv"))
 (census_data <- as_tibble(census_data))
 (county_data <- as_tibble(county_data))
 (police_deaths <- as_tibble(police_deaths))
+(race_demographics <- as_tibble(race_demographics))
 
 ########################################################################
-## Reconcile/Join Data -------------------------------------------------
+## Clean/Join Data -----------------------------------------------------
 ########################################################################
 # Notice that I've brought in a few datasets. Different datasets include
 # different ranges of time for police fatalities, with some overlap. On
@@ -97,6 +101,33 @@ police_data_second_date <- police_data_second %>%
   # Order by Date
   arrange(date)
 
+# Before cleaning our demographics dataset, let's just find the USA totals
+usa_demographics <- race_demographics %>%
+  filter(Location == "United States")
+
+# Clean our race demographics dataset
+race_dem_clean <- race_demographics %>%
+  janitor::clean_names() %>%
+  # Get rid of unnecessary columns
+  select(-c(total, footnotes)) %>%
+  # Let's pivot the dataset so we can join on it properly later
+  pivot_longer(cols = "white":"two_or_more_races",
+               names_to = "race",
+               values_to = "race_percent") %>%
+  # Change the name of our races to match what we have above
+  mutate(race = case_when(
+    race == "white" ~ "White",
+    race == "black" ~ "Black",
+    race == "asian" ~ "Asian",
+    race == "american_indian_alaska_native" ~ "Native",
+    race == "hispanic" ~ "Hispanic",
+    race == "two_or_more_races" ~ "Other",
+    race == "native_hawaiian_other_pacific_islander" ~ "Other"
+  )) %>%
+  # Impute 0 into any NA's
+  tidyr::replace_na(list(race_percent = 0)) %>%
+  print()
+
 # What's our range of dates?
 range(police_data_first_date$date)
 range(police_data_second_date$date)
@@ -107,17 +138,34 @@ table(police_data_first_date$name %in% police_data_second_date$name)
 # Split out our names that are not in the first dataset
 second_no_overlap <- police_data_second_date[!(police_data_second_date$name %in% police_data_first_date$name), ]
 
+# Before trying to de-dupe, there are a number of names listed as either
+# "Name withheld by police" or "TK TK". I'm assuming both of these mean
+# "name unknown", so let's pull these out before de-duping
+non_dupes <- police_data_first_date %>%
+  filter(name == "Name withheld by police" | name == "TK TK") %>%
+  print()
+
+# Add in non_dupes from the second dataset
+non_dupes <- police_data_second_date %>%
+  filter(name == "Name withheld by police" | name == "TK TK") %>%
+  bind_rows(non_dupes) %>%
+  print()
+
+
 # Join both datasets together
 police_all_dates <- police_data_first_date %>%
   # There are a lot of duplicates, so let's try to remove these
   # We'll look for duplicative names + dates, since there are naturally
   # some repeat common names
   distinct(name, age, .keep_all = T) %>%
-  bind_rows(second_no_overlap) %>%
+  # Bring back our non overlaps from the second dataset plus the rows
+  # we specifically pulled out because they didn't have names
+  bind_rows(second_no_overlap, non_dupes) %>%
   # Get rid of previous ID column and make our ID row unique
   select(-id) %>%
   mutate(uid = row_number()) %>%
   rename(id = uid) %>%
+  distinct() %>%
   print()
 
 police_compare <- police_data_first_date %>%
@@ -151,6 +199,8 @@ police_joined <- police_all_dates %>%
   left_join(census_data) %>%
   # Join in our county data
   left_join(county_cleaned, by = c("city" = "city", "stateCode" = "geographic_area")) %>%
+  # Join in our race demographic data on location and race
+  left_join(race_dem_clean, by = c("state" = "location", "race" = "race")) %>%
   # Make our numeric columns not characters
   mutate(percent_completed_hs = as.numeric(percent_completed_hs),
          poverty_rate = as.numeric(poverty_rate)) %>%
@@ -191,44 +241,52 @@ police_joined %>%
           plot.subtitle = element_text(hjust = 0, color = "slateblue2", size = 10),
           plot.caption = element_text(color = "dark gray", face = "italic", size = 10))
 
+# What's the breakout over time by race? Upon running this, I decided to
+# pull in demographic information because it unfairly looked like white
+# people were the primary target of police killings, which is true but is
+# not proportionate to their population in the U.S.
 
-# What's the breakout over time by race?
-police_joined %>%
+# To do this, first we'll pivot our USA total demographic data
+usa_dem_pivoted <- race_dem_clean %>%
+  filter(location == "United States") %>%
+  group_by(race) %>%
+  # Do this to combine our two Other categories which are being counted differently
+  summarise(race_percent = sum(race_percent)) %>%
+  print()
+
+# Ensure that the sum of each percentage adds up to 1
+if (sum(usa_dem_pivoted$race_percent) == 1) {
+  praise::praise()
+}
+
+# Save our dataset
+race_killings <- police_joined %>%
   # Take out our null values
   filter(!is.na(race)) %>%
   # Start by grouping by state
   group_by(race) %>%
   # Count up our sums
   summarise(fatalities = n()) %>%
-  top_n(10, fatalities) %>%
-  ggplot(aes(x = reorder(race, fatalities), y = fatalities), label = fatalities) +
+  # Bring in our country populations
+  left_join(usa_dem_pivoted, by = "race")
+
+race_killings %>%
+  ggplot(aes(x = 100*race_percent, y = fatalities), label = race) +
   # Let's make it a column graph and change the color/transparency
-  geom_col(fill = "slateblue") +
-  # Add a label by recreating our data build from earlier
-  geom_label(data = police_joined %>%
-               # Take out our null values
-               filter(!is.na(race)) %>%
-               # Start by grouping by state
-               group_by(race) %>%
-               # Count up our sums
-               summarise(fatalities = n()) %>%
-               top_n(10, fatalities),
-             aes(label = fatalities),
-             size = 2.5) +
+  geom_point(color = "slateblue") +
+  geom_text(aes(label = if_else(fatalities > 1000, race, "")), nudge_y = 400) +
   # Change the theme to classic
   theme_classic() +
   # Let's change the names of the axes and title
-  xlab("") +
+  xlab("Population (%)") +
   ylab("Number of Fatalities") +
-  labs(title = "Number of Police-caused Fatalities by Race",
+  labs(title = "Number of Police-caused Fatalities by Race\nand Percent of U.S. Population",
        subtitle = "Data runs from 2000-2020",
        caption = "Data is gathered from the Washington Post at\nhttps://github.com/washingtonpost/data-police-shootings") +
   # format our title and subtitle
   theme(plot.title = element_text(hjust = 0, color = "slateblue4"),
         plot.subtitle = element_text(hjust = 0, color = "slateblue2", size = 10),
-        plot.caption = element_text(color = "dark gray", size = 10, face = "italic")) +
-  # flip the axes
-  coord_flip()
+        plot.caption = element_text(color = "dark gray", size = 10, face = "italic"))
 
 # Interestingly enough, more people with a white ethnicity have been killed
 # by police than black people, at least according to the dataset. This seems

@@ -268,7 +268,11 @@ race_killings <- police_joined %>%
   # Count up our sums
   summarise(fatalities = n()) %>%
   # Bring in our country populations
-  left_join(usa_dem_pivoted, by = "race")
+  left_join(usa_dem_pivoted, by = "race") %>%
+  # Calculate the proportion
+  mutate(fatalities_perc = round(100*fatalities/sum(fatalities), 0),
+         race_percent = 100*race_percent) %>%
+  print()
 
 race_killings %>%
   ggplot(aes(x = 100*race_percent, y = fatalities), label = race) +

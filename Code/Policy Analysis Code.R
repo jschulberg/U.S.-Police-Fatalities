@@ -613,16 +613,46 @@ police_hs %>%
 police_hs %>%
   # First, filter out all of our NAs, which is 90% of our data
   filter(!is.na(poverty_rate)) %>%
-  group_by(city, state) %>%
+  group_by(state) %>%
   summarise(fatalities = n(),
             avg_poverty = mean(poverty_rate)) %>%
   ungroup() %>%
+  left_join(census_data) %>%
+  mutate(fatalities_normalized = 1000000*fatalities/popEst2014) %>%
   # Get rid of unneeded columns
-  select(-city, -state) %>%
-  cor()
+  select(-stateCode, -state, - popEst2014) %>%
+  cor() %>%
+  pander()
 
-# I really don't see any correlation here, so let's move on.
-
+# There's a bit of correlation here (-.1845) and more than we saw with
+# high school completion rate. The interesting thing to note is the negative
+# in the correlation. This means that as poverty rates generally increase,
+# the number of police-caused fatalities per 1,000,000 population goes down,
+# which is exactly opposite of what I originally thought. Again, the negative
+# correlation is rather weak, so I would not read too much into it.
+police_hs %>%
+  # First, filter out all of our NAs, which is 90% of our data
+  filter(!is.na(poverty_rate)) %>%
+  group_by(state) %>%
+  summarise(fatalities = n(),
+            avg_poverty = mean(poverty_rate)) %>%
+  ungroup() %>%
+  left_join(census_data) %>%
+  mutate(fatalities_normalized = 1000000*fatalities/popEst2014) %>%
+  ggplot(aes(x = avg_poverty, y = fatalities_normalized)) +
+  geom_point(color = "slateblue", alpha = 1) +
+  geom_smooth(method = "lm", se = F, color = "black") +
+  theme_classic() +
+  # Let's change the names of the axes and title
+  labs(title = "Normalized Police-caused Fatalities\nby Poverty Rate",
+       subtitle = "Police-caused fatalities are per 1,000,000 population\nusing 2014 Census data.",
+       caption = "*per 1,000,000 population") +
+  xlab("Poverty Rate (%)") +
+  ylab("Police-caused Fatalities*") +
+  # Center the title and format the subtitle/caption
+  theme(plot.title = element_text(hjust = 0, color = "slateblue4"),
+        plot.subtitle = element_text(color = "slateblue1", size = 10),
+        plot.caption = element_text(hjust = 1, face = "italic", color = "dark gray"))
 
 
 ########################################################################
